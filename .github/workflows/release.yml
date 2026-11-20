@@ -147,7 +147,7 @@ jobs:
           Get-Content 'dist\MarketRadyo.exe.sha256'
 
       - name: Yayin olustur ve dosyalari yukle
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
