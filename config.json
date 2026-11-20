@@ -1,0 +1,9 @@
+{
+  "update_repo": "OWNER/market-radyo",
+  "update_branch": "main",
+  "volume": 70,
+  "announce_every": 4,
+  "announce_enabled": true,
+  "cache_hours": 24,
+  "recent_window": 200
+}

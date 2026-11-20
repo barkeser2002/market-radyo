@@ -1,0 +1,44 @@
+{
+  "playlists": [
+    {
+      "id": "PL4BrNFx1j7E4b5gjlEWX4OfB2TB4DEI28",
+      "url": "https://www.youtube.com/playlist?list=PL4BrNFx1j7E4b5gjlEWX4OfB2TB4DEI28",
+      "title": "The Ultimate 80's Movie Songs Playlist",
+      "count": 140,
+      "thumbnail": "https://i.ytimg.com/vi/-n3sUWR4FV4/hqdefault.jpg?sqp=-oaymwEXCNACELwBSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLCjarQOwFdfxDhu9uQpTnW8a2r2Bw&usqp=CBQ",
+      "genre": "movie soundtrack pop"
+    },
+    {
+      "id": "PLyORnIW1xT6zC14Z45V6c00JFwRBWdh8P",
+      "url": "https://www.youtube.com/playlist?list=PLyORnIW1xT6zC14Z45V6c00JFwRBWdh8P",
+      "title": "100 Greatest Movie Songs of All Time - Best Movie Soundtracks",
+      "count": 100,
+      "thumbnail": "https://i.ytimg.com/vi/RgKAFK5djSk/hqdefault.jpg?sqp=-oaymwEXCNACELwBSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLCvqptPv0CRY6DTIhfEZ1sLRBdVyg&usqp=CBQ",
+      "genre": "movie soundtrack pop"
+    },
+    {
+      "id": "PL4BrNFx1j7E5qDxSPIkeXgBqX0J7WaB2a",
+      "url": "https://www.youtube.com/playlist?list=PL4BrNFx1j7E5qDxSPIkeXgBqX0J7WaB2a",
+      "title": "The Ultimate Movie Score Playlist",
+      "count": 246,
+      "thumbnail": "https://i.ytimg.com/vi/maA5bCx3_Jk/hqdefault.jpg?sqp=-oaymwExCNACELwBSFryq4qpAyMIARUAAIhCGAHwAQH4Af4JgALQBYoCDAgAEAEYfyA5KCUwDw==&rs=AOn4CLDOwXvj6vyTPFd8sClVi_6124SIZQ",
+      "genre": "movie soundtrack pop"
+    },
+    {
+      "id": "PLtMJF5iI4w_RnTohhNAkQCgb0VNDXdsDV",
+      "url": "https://www.youtube.com/playlist?list=PLtMJF5iI4w_RnTohhNAkQCgb0VNDXdsDV",
+      "title": "80s movie music videos",
+      "count": 114,
+      "thumbnail": "https://i.ytimg.com/vi/fUis9yny_lI/hqdefault.jpg?sqp=-oaymwExCNACELwBSFryq4qpAyMIARUAAIhCGAHwAQH4Af4JgALQBYoCDAgAEAEYZSBKKD8wDw==&rs=AOn4CLAULxQ7Tnk9P8exKwspJciLivnqPg",
+      "genre": "movie soundtrack pop"
+    },
+    {
+      "id": "PLrrQclmFn_7cfbELsVdc1F5SoKdNWCIWf",
+      "url": "https://www.youtube.com/playlist?list=PLrrQclmFn_7cfbELsVdc1F5SoKdNWCIWf",
+      "title": "Mamma Mia soundtrack",
+      "count": 19,
+      "thumbnail": "https://i.ytimg.com/vi/b6Zh-sD3Wg0/hqdefault.jpg?sqp=-oaymwEXCNACELwBSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLDaAAXSSDnHpxcBn7000Li2YYy1Tw",
+      "genre": "movie soundtrack pop"
+    }
+  ]
+}
