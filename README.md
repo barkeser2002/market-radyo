@@ -49,6 +49,21 @@ ağırlıklı rastgele olarak karıştırır.
     Uzun süredir çalmayan anons daha yüksek olasılıkla seçilir.
   - Tek dosya varsa her zaman o çalar.
 
+## Güncelleme nasıl yayınlanır
+
+1. Kodda değişikliği yapın ve test edin.
+2. `version.txt` içindeki sürümü artırın (ör. `1.0.0` -> `1.0.1`).
+3. Commit + push edin:
+
+```
+git add -A
+git commit -m "Açıklama"
+git push
+```
+
+Markettekiler bir sonraki açılışta sürümü görür ve yeni dosyaları otomatik indirir.
+`config.json` ve `data/` güncellemede değişmez.
+
 ## Otomatik güncelleme
 
 - `config.json` içindeki `update_repo` (varsayılan `OWNER/market-radyo`) ve `update_branch` (`main`)
