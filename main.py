@@ -1,31 +1,34 @@
-"""Market Radyo giriş noktası: güncelleme kontrolü, kütüphane ve arayüz."""
+"""Market Radyo giriş noktası: ayarlar, kütüphane, güncelleyici ve arayüz."""
 
-import json
 import logging
+import os
+import shutil
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
-
-DEFAULT_CONFIG = {
-    "update_repo": "OWNER/market-radyo",
-    "update_branch": "main",
-    "volume": 70,
-    "announce_every": 4,
-    "announce_enabled": True,
-    "cache_hours": 24,
-    "recent_window": 200,
-}
+# Derlenmiş exe'de veriler (config.json, data/, anonslar/) exe'nin yanında durur;
+# PyInstaller tek dosya modunda __file__ geçici açılma klasörüne işaret eder.
+if getattr(sys, "frozen", False):
+    BASE = Path(sys.executable).resolve().parent
+else:
+    BASE = Path(__file__).resolve().parent
 
 
-def load_config():
-    cfg = dict(DEFAULT_CONFIG)
-    try:
-        cfg.update(json.loads((BASE / "config.json").read_text(encoding="utf-8")))
-    except (OSError, ValueError):
-        pass
-    return cfg
+def prepare_frozen_dirs():
+    """Derlenmiş exe'de çalışma klasörünü exe'nin klasörüne alır ve eksik öğeleri hazırlar.
+
+    - anonslar/ yoksa oluşturulur.
+    - data/playlists.json yoksa exe'ye gömülü kopyadan yazılır (ilk açılış).
+    """
+    os.chdir(BASE)
+    (BASE / "anonslar").mkdir(exist_ok=True)
+    data = BASE / "data"
+    data.mkdir(exist_ok=True)
+    bundled = Path(getattr(sys, "_MEIPASS", BASE)) / "data" / "playlists.json"
+    target = data / "playlists.json"
+    if not target.exists() and bundled.exists():
+        shutil.copyfile(bundled, target)
 
 
 def setup_logging():
@@ -38,22 +41,18 @@ def setup_logging():
 
 
 def main():
+    if getattr(sys, "frozen", False):
+        prepare_frozen_dirs()
     setup_logging()
-    cfg = load_config()
+    from config import load_config
     from playlists import Library
     from updater import Updater
-
-    lib = Library(BASE, cfg)
-    upd = Updater(BASE, cfg)
-    try:
-        if upd.check_app():
-            upd.restart()  # yeni sürüm kuruldu: yeni süreci başlatıp çıkar
-        upd.check_playlists(lib)
-    except Exception:
-        logging.exception("güncelleme kontrolü başarısız, mevcut sürümle devam")
-
     from gui import run_app
-    run_app(BASE, cfg, lib)
+
+    cfg = load_config(BASE)
+    lib = Library(BASE, cfg)
+    upd = Updater(BASE, cfg)  # denetim ve playlist senkronu arayüzle birlikte arka planda başlar
+    run_app(BASE, cfg, lib, upd)
 
 
 if __name__ == "__main__":

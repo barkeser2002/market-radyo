@@ -1,11 +1,20 @@
 @echo off
+rem Programi konsolsuz (pythonw) baslatir. .venv yoksa once kurulum.bat calisir.
 chcp 65001 >nul
+setlocal
 cd /d "%~dp0"
-python -m pip install -q -r requirements.txt
-if errorlevel 1 echo Uyari: bagimliliklar tam kurulamadi, yine de deneniyor.
-python main.py
-if errorlevel 1 (
-  echo.
-  echo Program hata ile kapandi. data\radyo.log dosyasina bakin.
-  pause
+
+if not exist ".venv\Scripts\pythonw.exe" (
+  echo Sanal ortam yok, kurulum yapiliyor...
+  call "%~dp0kurulum.bat"
+  if errorlevel 1 (
+    echo Kurulum basarisiz oldu, program baslatilmadi.
+    pause
+    endlocal
+    exit /b 1
+  )
 )
+
+start "" ".venv\Scripts\pythonw.exe" main.py
+endlocal
+exit /b 0

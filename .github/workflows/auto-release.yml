@@ -1,0 +1,309 @@
+name: Auto release
+
+# Surum ve yayin otomasyonu (insan onayi beklenmez).
+#
+# Tetikleyiciler:
+# - workflow_run: "Lint" basariyla bittiyse ve PR dependabot[bot] tarafindan acildiysa
+#   PR squash ile birlestirilir. Yalnizca .github/ dosyalarini degistiren (actions)
+#   guncellemelerde surum artirilmaz; is orada biter.
+# - schedule (her saat): son etiketten bu yana exe'yi etkileyen degisiklik varsa surum
+#   artirilip yayinlanir. Saat 03 (UTC) calismasinda ayrica yt-dlp son surumu denenir.
+# - push (main, yalnizca version.txt): elle yazilmis yeni surum yayinlanir.
+# - workflow_dispatch: elle calistirma (yt-dlp kontrolu dahil).
+#
+# Yayin release.yml'yi workflow_call ile cagirarak yapilir; GITHUB_TOKEN ile itilen
+# etiket/commit baska workflow'lari tetiklemez.
+# Yayin basarisizsa (rollback job): etiket ve GitHub Release silinir; dependabot
+# birlesmesi ile surum commit'i git revert ile geri alinir.
+
+on:
+  workflow_run:
+    workflows: ["Lint"]
+    types: [completed]
+  schedule:
+    - cron: "17 * * * *"
+  push:
+    branches: [main]
+    paths: [version.txt]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Birlestir ve surum artir
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      dependabot: ${{ steps.gate.outputs.dependabot }}
+      merge_sha: ${{ steps.gate.outputs.merge_sha }}
+      bump_sha: ${{ steps.publish.outputs.bump_sha }}
+      notes: ${{ steps.publish.outputs.notes }}
+    steps:
+      - name: Dependabot PR'ini birlestir (workflow_run)
+        id: gate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          GO=false
+          DEP=false
+          MERGE_SHA=""
+          TITLE=""
+          if [ "$EVENT" != "workflow_run" ]; then
+            GO=true
+          else
+            PR=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" --jq '.[0].number // empty')
+            if [ -z "$PR" ]; then
+              echo "Bu commit icin PR bulunamadi; atlaniyor."
+            else
+              PR_USER=$(gh api "repos/$REPO/pulls/$PR" --jq '.user.login')
+              PR_STATE=$(gh api "repos/$REPO/pulls/$PR" --jq '.state')
+              if [ "$PR_USER" != "dependabot[bot]" ] || [ "$PR_STATE" != "open" ]; then
+                echo "PR #$PR atlaniyor (yazar: $PR_USER, durum: $PR_STATE)."
+              else
+                DEP=true
+                TITLE=$(gh api "repos/$REPO/pulls/$PR" --jq '.title')
+                FILES=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
+                ACTIONS_ONLY=true
+                while IFS= read -r f; do
+                  [ -z "$f" ] && continue
+                  case "$f" in
+                    .github/*) ;;
+                    *) ACTIONS_ONLY=false ;;
+                  esac
+                done <<< "$FILES"
+                gh pr merge "$PR" --repo "$REPO" --squash --delete-branch
+                MERGE_SHA=$(gh api "repos/$REPO/pulls/$PR" --jq '.merge_commit_sha')
+                echo "PR #$PR birlestirildi: $MERGE_SHA"
+                if [ "$ACTIONS_ONLY" = true ]; then
+                  echo "Yalnizca .github/ degisti; surum artirilmadi."
+                else
+                  GO=true
+                fi
+              fi
+            fi
+          fi
+          {
+            echo "go=$GO"
+            echo "dependabot=$DEP"
+            echo "merge_sha=$MERGE_SHA"
+            echo "title=$TITLE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Main'i al
+        if: steps.gate.outputs.go == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Python kur
+        if: steps.gate.outputs.go == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: yt-dlp denetle (saat 03 UTC ve elle calistirmada)
+        id: ytdlp
+        if: steps.gate.outputs.go == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "schedule" ] && [ "$(date -u +%H)" != "03" ]; then
+            echo "Saat 03 (UTC) degil; yt-dlp kontrolu atlaniyor."
+            exit 0
+          fi
+          cat > "$RUNNER_TEMP/ytdlp.py" <<'PY'
+          import json, os, re, urllib.request
+          from pathlib import Path
+
+          def nums(v):
+              return tuple(int(x) for x in re.findall(r"\d+", v))
+
+          req = Path("requirements.txt")
+          text = req.read_text(encoding="utf-8")
+          m = re.search(r"^yt-dlp[ \t]*(?:(?:==|>=)[ \t]*([^\s;#]+))?[ \t]*(?:#.*)?$", text, re.M)
+          if m is None:
+              raise SystemExit("requirements.txt icinde yt-dlp satiri yok")
+          current = m.group(1)
+          latest = json.load(urllib.request.urlopen(
+              "https://pypi.org/pypi/yt-dlp/json", timeout=30))["info"]["version"]
+          if current and nums(current) >= nums(latest):
+              print("yt-dlp guncel: %s" % current)
+              raise SystemExit(0)
+          req.write_text(text[:m.start()] + "yt-dlp==" + latest + text[m.end():], encoding="utf-8")
+          print("yt-dlp %s -> %s" % (current or "sabitlenmemis", latest))
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as f:
+              f.write("version=%s\n" % latest)
+          PY
+          python "$RUNNER_TEMP/ytdlp.py"
+
+      - name: Surum belirle
+        id: version
+        if: steps.gate.outputs.go == 'true'
+        shell: bash
+        env:
+          YTDLP: ${{ steps.ytdlp.outputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force --quiet origin
+          LAST=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+          CHANGED=false
+          if [ -z "$LAST" ] || [ -n "$YTDLP" ]; then
+            CHANGED=true
+          elif [ -n "$(git diff --name-only "$LAST" HEAD -- '*.py' 'requirements*.txt' 'MarketRadyo.spec' 'data/playlists.json')" ]; then
+            CHANGED=true
+          fi
+          if [ "$CHANGED" != true ]; then
+            echo "Son etiket ($LAST) sonrasinda exe'yi etkileyen degisiklik yok; surum artirilmadi."
+            exit 0
+          fi
+          export LAST_TAG="$LAST"
+          cat > "$RUNNER_TEMP/version.py" <<'PY'
+          import os, re, subprocess
+          from pathlib import Path
+
+          def nums(v):
+              return tuple(int(x) for x in re.findall(r"\d+", v))
+
+          last = os.environ.get("LAST_TAG", "").lstrip("v")
+          cur = Path("version.txt").read_text(encoding="utf-8").strip()
+          if not re.fullmatch(r"\d+\.\d+\.\d+", cur):
+              raise SystemExit("version.txt gecersiz: %r" % cur)
+
+          if (not last) or nums(cur) > nums(last):
+              # version.txt son etiketten ileride: elle yazilan surum kullanilir.
+              major, minor, patch = nums(cur)
+          else:
+              # Aksi halde son surumun patch'i bir artirilir.
+              major, minor, patch = max(nums(cur), nums(last))
+              patch += 1
+
+          def tag_on_remote(tag):
+              r = subprocess.run(["git", "ls-remote", "--exit-code", "--tags", "origin",
+                                  "refs/tags/" + tag], capture_output=True)
+              return r.returncode == 0
+
+          while tag_on_remote("v%d.%d.%d" % (major, minor, patch)):
+              patch += 1
+          version = "%d.%d.%d" % (major, minor, patch)
+          Path("version.txt").write_text(version + "\n", encoding="utf-8")
+          print("yeni surum: %s (son etiket: %s)" % (version, last or "yok"))
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as f:
+              f.write("version=%s\n" % version)
+              f.write("tag=v%s\n" % version)
+          PY
+          python "$RUNNER_TEMP/version.py"
+
+      - name: Commit, etiket, push ve yayin notu
+        id: publish
+        if: steps.gate.outputs.go == 'true' && steps.version.outputs.tag != ''
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          YTDLP: ${{ steps.ytdlp.outputs.version }}
+          DEPENDABOT: ${{ steps.gate.outputs.dependabot }}
+          PR_TITLE: ${{ steps.gate.outputs.title }}
+        run: |
+          set -euo pipefail
+          LAST=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+
+          # Yayin notu: dependabot ise PR basligi, degilse son etiketten beri commit listesi.
+          if [ "$DEPENDABOT" = "true" ]; then
+            NOTES="$PR_TITLE"
+          else
+            if [ -n "$LAST" ]; then RANGE="$LAST..HEAD"; else RANGE="HEAD"; fi
+            NOTES=$(git log --no-merges --pretty=format:'- %s' "$RANGE" 2>/dev/null | head -n 60 || true)
+            [ -n "$NOTES" ] || NOTES="- Surum guncellemesi"
+          fi
+          if [ -n "$YTDLP" ]; then NOTES="$NOTES"$'\n'"- yt-dlp $YTDLP"; fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.txt requirements.txt
+
+          COMMITTED=false
+          if ! git diff --cached --quiet; then
+            printf 'chore: release %s [skip ci]\n\nCo-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>\n' "$TAG" > "$RUNNER_TEMP/commit-msg.txt"
+            git commit -q -F "$RUNNER_TEMP/commit-msg.txt"
+            COMMITTED=true
+          fi
+
+          # Etiket, rebase'den sonra (main'in son hali uzerinde) atilir.
+          git pull --rebase --quiet origin main
+          git tag -a "$TAG" -m "Surum $TAG"
+
+          BUMP_SHA=""
+          if [ "$COMMITTED" = true ]; then
+            git push origin HEAD:main
+            BUMP_SHA=$(git rev-parse HEAD)
+          fi
+          git push origin "refs/tags/$TAG"
+
+          {
+            echo "bump_sha=$BUMP_SHA"
+            echo "notes<<NOTES_EOF"
+            printf '%s\n' "$NOTES"
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Yayinla
+    needs: bump
+    if: needs.bump.outputs.tag != ''
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.bump.outputs.version }}
+      notes: ${{ needs.bump.outputs.notes }}
+
+  rollback:
+    name: Yayin basarisizsa geri al
+    needs: [bump, release]
+    if: always() && needs.release.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Main'i al
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Etiketi ve yayini sil, dependabot birlesmesini geri al
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.bump.outputs.tag }}
+          DEPENDABOT: ${{ needs.bump.outputs.dependabot }}
+          MERGE_SHA: ${{ needs.bump.outputs.merge_sha }}
+          BUMP_SHA: ${{ needs.bump.outputs.bump_sha }}
+        run: |
+          set -euo pipefail
+          gh release delete "$TAG" --repo "$REPO" --yes --cleanup-tag || true
+          git push origin ":refs/tags/$TAG" || true
+          if [ "$DEPENDABOT" = "true" ] && [ -n "$MERGE_SHA" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            if [ -n "$BUMP_SHA" ]; then git revert --no-edit "$BUMP_SHA"; fi
+            git revert --no-edit "$MERGE_SHA"
+            git push origin HEAD:main
+          else
+            echo "Geri alinacak dependabot birlesmesi yok; commit'ler yerinde birakildi."
+          fi

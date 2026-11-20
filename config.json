@@ -5,5 +5,6 @@
   "announce_every": 4,
   "announce_enabled": true,
   "cache_hours": 24,
-  "recent_window": 200
+  "recent_window": 200,
+  "crossfade_sec": 4
 }

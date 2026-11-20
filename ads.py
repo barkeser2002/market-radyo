@@ -8,10 +8,19 @@ Kurallar:
 - Tek dosya varsa her zaman o çalınır.
 """
 
+import logging
 import random
+import subprocess
 from pathlib import Path
 
+from ffmpeg_util import ffmpeg_path, hidden_window_kwargs
+
+log = logging.getLogger("radyo.ads")
+
 AUDIO_EXTENSIONS = (".mp3",)
+SKIP_NAMES = {"desktop.ini", "thumbs.db"}
+TEST_TIMEOUT = 120
+CONVERT_TIMEOUT = 600
 
 
 def list_announcements(folder):
@@ -83,3 +92,90 @@ class AnnouncementPicker:
         self._last_index[chosen] = self._counter
         self._counter += 1
         self._last_file = chosen
+
+
+# ----- anons dönüştürme -------------------------------------------------
+def _ffmpeg_ok(path):
+    """ffmpeg dosyayı baştan sona hatasız çözebiliyorsa True."""
+    try:
+        r = subprocess.run(
+            [ffmpeg_path(), "-hide_banner", "-v", "error", "-nostdin",
+             "-i", str(path), "-f", "null", "-"],
+            capture_output=True, timeout=TEST_TIMEOUT, **hidden_window_kwargs())
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return r.returncode == 0 and not r.stderr.strip()
+
+
+def _free_mp3_name(src):
+    """src için klasörde çakışmayan .mp3 adı (x.mp3, x_1.mp3, x_2.mp3 ...)."""
+    base = src.with_suffix(".mp3")
+    if not base.exists():
+        return base
+    n = 1
+    while True:
+        cand = src.parent / ("%s_%d.mp3" % (src.stem, n))
+        if not cand.exists():
+            return cand
+        n += 1
+
+
+def convert_to_mp3(src):
+    """src'yi mp3'e çevirir. Yeni dosya doğrulanınca orijinali siler.
+
+    Başarılı olursa yeni mp3 yolunu, başarısız olursa None döndürür (orijinal kalır).
+    """
+    src = Path(src)
+    dst = _free_mp3_name(src)
+    cmd = [ffmpeg_path(), "-hide_banner", "-v", "error", "-nostdin", "-n",
+           "-i", str(src), "-map", "0:a:0", "-vn",
+           "-codec:a", "libmp3lame", "-b:a", "192k", str(dst)]
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=CONVERT_TIMEOUT,
+                           **hidden_window_kwargs())
+        ok = (r.returncode == 0 and dst.is_file() and dst.stat().st_size > 0
+              and _ffmpeg_ok(dst))
+        err = r.stderr.decode("utf-8", "replace").strip()[-300:]
+    except (OSError, subprocess.TimeoutExpired) as e:
+        ok, err = False, str(e)
+    if not ok:
+        log.warning("anons dönüştürülemedi, orijinal korunuyor: %s (%s)", src.name, err)
+        if dst.exists():
+            try:
+                dst.unlink()
+            except OSError:
+                pass
+        return None
+    try:
+        if src.resolve() != dst.resolve():
+            src.unlink()
+    except OSError as e:
+        log.warning("orijinal anons silinemedi (%s): %s", src.name, e)
+    log.info("anons mp3'e çevrildi: %s -> %s", src.name, dst.name)
+    return dst
+
+
+def prepare_announcements(folder):
+    """Klasördeki her dosyayı kontrol eder; mp3 değilse ya da okunamıyorsa mp3'e çevirir.
+
+    Dönüş: kullanılabilir mp3 dosyalarının sıralı listesi (list_announcements gibi).
+    """
+    folder = Path(folder)
+    if not folder.is_dir():
+        return []
+    try:
+        ffmpeg_path()
+    except FileNotFoundError as e:
+        log.warning("anons kontrolü atlandı: %s", e)
+        return list_announcements(folder)
+    usable = []
+    for p in sorted(folder.iterdir()):
+        if not p.is_file() or p.name.lower() in SKIP_NAMES or p.name.startswith("."):
+            continue
+        if p.suffix.lower() == ".mp3" and _ffmpeg_ok(p):
+            usable.append(str(p))
+            continue
+        new = convert_to_mp3(p)
+        if new is not None:
+            usable.append(str(new))
+    return sorted(usable)

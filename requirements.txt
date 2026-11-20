@@ -1,4 +1,6 @@
-yt-dlp
-python-vlc
+yt-dlp==2026.10.26
+sounddevice
+numpy
 Pillow
 requests
+customtkinter==6.0.0

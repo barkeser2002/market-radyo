@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Pip bagimliliklari (yt-dlp dahil) gunluk. Dependabot PR'lari Lint basarili olunca
+  # auto-release.yml tarafindan otomatik birlestirilir.
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+
+  # Actions surumleri haftalik. Yalnizca .github/ degistiren PR'lar surum artirmaz.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

@@ -1,0 +1,7 @@
+# Lint kapsami bilerek dar: yalnizca gercek hatalar (sozdizimi, tanimsiz isim,
+# kirik karsilastirma/format). Stil kurallari bu projede CI'yi kirmasin diye kapali.
+target-version = "py313"
+extend-exclude = ["build", "dist"]
+
+[lint]
+select = ["E9", "F63", "F7", "F82"]

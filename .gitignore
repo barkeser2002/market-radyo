@@ -7,3 +7,20 @@ data/*.new
 *.part
 anonslar/*.mp3
 *.log
+
+# yerel ffmpeg (gelistirme icin, dagitilmaz)
+bin/
+
+# guncelleme ve derleme ciktilari
+data/update.bat
+*.old
+*.tmp
+dist/
+build/
+*.spec
+
+# paketleme tarifi (derleme ayarlari versiyonlanir)
+!MarketRadyo.spec
+
+# sanal ortam (kurulum.bat olusturur)
+.venv/
