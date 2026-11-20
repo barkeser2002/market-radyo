@@ -39,7 +39,7 @@ Programın içindeki **Hakkında** sekmesinde aynı bilgiler, sürüm ve bağlan
 
 - Windows 10/11 (64-bit). **Hedef cihazda Python gerekmez.**
   Geliştirme ve derleme için Python 3.10+ (64-bit) gerekir.
-- **ffmpeg** (zorunlu). Arama sırası: önce `binfmpeg.exe` (proje klasörü), yoksa sistem PATH'i.
+- **ffmpeg** (zorunlu). Arama sırası: önce `bin\fmpeg.exe` (proje klasörü), yoksa sistem PATH'i.
   Ses çıkışı için varsayılan bir ses aygıtı gerekir.
 - İnternet bağlantısı. YouTube cookie'si **gerekmez**.
 
