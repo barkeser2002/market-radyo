@@ -123,8 +123,13 @@ jobs:
           foreach ($f in @($logFile, $stdout, $stderr)) {
             if (Test-Path $f) { $text += (Get-Content -Path $f -Raw -Encoding UTF8) + "`n" }
           }
-          if ($text -match 'Traceback|\bERROR\b') {
-            $problems += 'log/stdout/stderr icinde Traceback veya ERROR var'
+          # main.py biçimi: "%(asctime)s %(levelname)s %(name)s: %(message)s"
+          # Yalnizca seviye alani ERROR/CRITICAL olan satirlar hata sayilir (WARNING asla).
+          # -cmatch: buyuk/kucuk harf duyarli.
+          $errLine = '(?m)^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} (ERROR|CRITICAL) '
+          $traceback = 'Traceback \(most recent call last\)'
+          if (($text -cmatch $errLine) -or ($text -cmatch $traceback)) {
+            $problems += 'log/stdout/stderr icinde ERROR/CRITICAL satiri veya Traceback var'
             if (Test-Path $logFile) {
               Write-Host '--- radyo.log (son 80 satir) ---'
               Get-Content -Path $logFile -Encoding UTF8 | Select-Object -Last 80

@@ -675,6 +675,7 @@ class RadioEngine:
         if info is None:
             if not self._stop.is_set():
                 self.bad_ids.add(track.id)
+                log.warning("şarkı atlandı, akış alınamadı: %s (%s)", track.title, track.id)
                 self._set_status("Atlandı (akış alınamadı): " + track.title)
             return None
         url, headers, duration = info
