@@ -1,8 +1,9 @@
 """Gerçek ağ testleri: YouTube araması ve bir istek şarkısının PCM akışı.
 
-İnternet yoksa atlanır. Cookie kullanılmaz, hiçbir şey indirilmez (yalnızca ses akışı çözülür).
+İnternet yoksa atlanır. PCM akış testi yalnızca RADYO_CANLI_TEST=1 ile çalışır. Cookie kullanılmaz, hiçbir şey indirilmez (yalnızca ses akışı çözülür).
 """
 
+import os
 import sys
 import time
 import unittest
@@ -32,6 +33,8 @@ class LiveSearchTest(unittest.TestCase):
             self.assertTrue(p["id"])
             self.assertTrue(p["title"])
 
+    @unittest.skipUnless(os.environ.get("RADYO_CANLI_TEST") == "1",
+                         "yayin: RADYO_CANLI_TEST=1 ile acilir (CI datacenter IP'si YouTube botu tarafindan engelleniyor)")
     def test_request_song_pcm_arrives(self):
         song = search_all("daft punk get lucky")["songs"][0]
         url, headers, duration = resolve_stream(song["id"])
