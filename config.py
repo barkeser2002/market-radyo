@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 DEFAULT_CONFIG = {
-    "update_repo": "OWNER/market-radyo",
+    "update_repo": "barkeser2002/market-radyo",
     "update_branch": "main",
     "volume": 70,
     "announce_every_min": 10,   # anons aralığı (dakika, 1-60); eski "announce_every" anahtarı yok sayılır

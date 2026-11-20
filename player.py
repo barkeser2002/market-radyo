@@ -61,6 +61,7 @@ ANNOUNCE_MODES = ("duck", "pause")
 FADE_DEFAULT = 2.0         # duraklatma modunda şarkının kısılma / geri gelme süresi (sn)
 FADE_MAX = 3.0
 RETRY_MAX = 3              # duraklatılmış akış yeniden açılırken ağ hatasında deneme sayısı
+AUDIO_RETRY_SEC = 5.0      # ses aygıtı yokken ya da koptuğunda yeniden deneme aralığı (sn)
 
 
 def clamp_announce_min(value):
@@ -180,16 +181,25 @@ def clamp_crossfade(value):
     return max(0.0, min(CROSSFADE_MAX, v))
 
 
+def reset_audio_backend():
+    """PortAudio'yu yeniden başlatır ki sonradan takılan ses aygıtı görülsün. Hata yok sayılır."""
+    try:
+        import sounddevice as sd
+        sd._terminate()
+        sd._initialize()
+    except Exception as e:
+        log.debug("ses sürücüsü yeniden başlatılamadı: %s", e)
+
+
 class RadioEngine:
     def __init__(self, cfg, library, announcer, on_item_start=None):
         self.library = library
         self.announcer = announcer
         self.on_item_start = on_item_start  # her şarkı başladığında item ile çağrılır (radyo iş parçacığında)
         self.mixer = Mixer()
-        try:
-            self.mixer.open()  # ses aygıtı yoksa burada hata verir
-        except Exception as e:
-            raise RuntimeError("Ses çıkışı açılamadı (ses aygıtı yok olabilir): %s" % e) from e
+        # Ses aygıtı yoksa motor yine kurulur: uyarı yazılır, _audio_tick belli aralıkla yeniden dener.
+        self.mixer.open()
+        self._audio_next_try = time.monotonic() + AUDIO_RETRY_SEC
         self.mixer.set_volume(int(cfg.get("volume", 70)) / 100.0)
 
         self.crossfade_sec = clamp_crossfade(cfg.get("crossfade_sec", CROSSFADE_DEFAULT))
@@ -296,6 +306,7 @@ class RadioEngine:
             "status": status, "paused": bool(self.mixer.paused),
             "until_ann_sec": until, "announcing": announcing,
             "hold": self.mixer.hold_state(), "mode": self.announce_mode,
+            "audio_ok": self.mixer.audio_ok(),
         }
 
     # ----- yardımcılar ------------------------------------------------
@@ -449,8 +460,48 @@ class RadioEngine:
             return
         self.requests.advance(rid)     # henüz sırası gelmemiş şarkı atlanır
 
+    def _audio_tick(self):
+        """Ses çıkışını izler. Aygıt yoksa ya da koptuysa AUDIO_RETRY_SEC aralıkla yeniden dener.
+
+        Aygıt açıksa True. Aygıt geri geldiğinde çalan şarkı kaldığı yerden sürer.
+        """
+        m = self.mixer
+        if m.audio_ok():
+            if m.check_device():
+                return True
+            self._audio_next_try = time.monotonic() + AUDIO_RETRY_SEC
+            self._set_status("Ses çıkışı bulunamadı, bekleniyor…")
+            return False
+        if time.monotonic() < self._audio_next_try:
+            return False
+        self._audio_next_try = time.monotonic() + AUDIO_RETRY_SEC
+        reset_audio_backend()
+        if not m.open():
+            self._set_status("Ses çıkışı bulunamadı, bekleniyor…")
+            return False
+        self._set_status("Ses çıkışı bulundu")
+        self._resume_after_outage()
+        return True
+
+    def _resume_after_outage(self):
+        """Ses geri geldi. Çalan akış sağlamsa tamponundan sürer; bozulmuşsa aynı konumdan (-ss) yeniden açılır."""
+        cur = self.mixer.current()
+        item = self._cur_item
+        if cur is None or item is None or self.mixer.hold_state() is not None:
+            return
+        if cur.resumable():
+            return
+        pos = cur.position_sec()
+        self._set_status("Ses geri geldi; şarkı kaldığı yerden açılıyor")
+        new = self._open_at(item, pos)
+        if new is None:
+            return  # açılamadı: normal akış kopma yolu (_on_failure / _switch) devreye girer
+        self.mixer.transition(new, 0.0)
+
     def _tick(self):
         self._process_commands()
+        if not self._audio_tick():
+            return  # ses çıkışı yok: şarkı/anons başlatılmaz, komutlar yine işlenir
         self._announcement_tick()
         if self._skip.is_set():
             self._skip.clear()

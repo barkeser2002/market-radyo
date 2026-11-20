@@ -123,9 +123,7 @@ jobs:
           foreach ($f in @($logFile, $stdout, $stderr)) {
             if (Test-Path $f) { $text += (Get-Content -Path $f -Raw -Encoding UTF8) + "`n" }
           }
-          $audioOnly = $text -match 'PortAudioError|Error querying device'
-          if ($audioOnly) { Write-Host 'Not: CI sanal makinesinde ses aygiti yok; ses aygiti hatasi duman testinde yok sayildi.' }
-          if (-not $audioOnly -and $text -match 'Traceback|\bERROR\b') {
+          if ($text -match 'Traceback|\bERROR\b') {
             $problems += 'log/stdout/stderr icinde Traceback veya ERROR var'
             if (Test-Path $logFile) {
               Write-Host '--- radyo.log (son 80 satir) ---'

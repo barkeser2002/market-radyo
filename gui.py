@@ -333,7 +333,7 @@ class App:
         self._track_kind = "track"          # şu an çalan öğenin türü: track | request
         self._req_badge_shown = False
         self.announcer = AnnouncementPicker(prepare_announcements(self.base / "anonslar"))
-        # ses çıkışı yoksa burada hata verir
+        # ses çıkışı yoksa motor çökmez; rozet gösterilir ve motor aygıtı bekler
         self.engine = RadioEngine(cfg, lib, self.announcer, on_item_start=self._on_item_start)
 
         root.title(APP_NAME)
@@ -448,6 +448,10 @@ class App:
                                       text_color=ACCENT_TEXT, fg_color=ACCENT_HOVER,
                                       corner_radius=14, height=28)
         self._req_badge_shown = False
+        self.audio_badge = ctk.CTkLabel(slot, text="🔇 Ses çıkışı bulunamadı, bekleniyor…",
+                                        font=F(12, True), text_color=TEXT,
+                                        fg_color=DANGER, corner_radius=14, height=28)
+        self._audio_badge_shown = False
 
         prog = ctk.CTkFrame(right, fg_color="transparent", corner_radius=0)
         prog.pack(fill="x", pady=(6, 0))
@@ -861,6 +865,14 @@ class App:
             else:
                 self.req_badge.pack_forget()
             self._req_badge_shown = req_on
+
+        audio_off = not s.get("audio_ok", True)
+        if audio_off != self._audio_badge_shown:
+            if audio_off:
+                self.audio_badge.pack(side="left", pady=4, padx=(0, 8))
+            else:
+                self.audio_badge.pack_forget()
+            self._audio_badge_shown = audio_off
 
         # geçiş sürerken başlık yeni şarkıya aittir: ilerleme de gelen akıştan okunur
         inc = self.engine.mixer.incoming()

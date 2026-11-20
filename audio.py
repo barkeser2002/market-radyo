@@ -39,6 +39,7 @@ DUCK_DOWN_SEC = 0.5       # müziğin kısılma süresi
 DUCK_UP_SEC = 1.0         # müziğin eski sesine dönme süresi
 LIMIT_KNEE = 0.9          # bu genliğin üstünde yumuşak sıkıştırma başlar
 RESUME_TAIL_SEC = 2.0     # duraklatılmış akış bu kadar saniyeden fazla eksikse "yarım" sayılır
+DEVICE_STALL_SEC = 2.0    # ses çıkışının geri çağırması bu kadar süre gelmezse aygıt koptu sayılır
 
 
 def equal_power_gains(pos, length, n):
@@ -310,16 +311,69 @@ class Mixer:
         self.volume = 1.0
         self.paused = False
         self._out = None
+        self._audio_ok = False     # ses çıkışı açık mı (aygıt yoksa ya da koptuysa False)
+        self._last_cb = 0.0        # son geri çağırma zamanı (monotonic); aygıt kopmasını anlamak için
+        self._warned = False       # "aygıt yok" uyarısı zaten yazıldı mı (her denemede tekrar yazılmaz)
 
     # ----- aygıt ------------------------------------------------------
+    def audio_ok(self):
+        return self._audio_ok
+
     def open(self):
-        import sounddevice as sd  # ses aygıtı yoksa burada hata verir
-        self._out = sd.OutputStream(samplerate=SR, channels=CH, dtype="float32",
-                                    callback=self._callback)
-        self._out.start()
+        """Ses çıkışını açmayı dener. Başarılıysa True. Aygıt yoksa WARNING yazar (traceback yok) ve False döner."""
+        if self._out is not None:
+            return True
+        try:
+            import sounddevice as sd
+            self._last_cb = time.monotonic()
+            out = sd.OutputStream(samplerate=SR, channels=CH, dtype="float32",
+                                  callback=self._callback)
+            out.start()
+        except Exception as e:
+            if not self._warned:
+                log.warning("ses aygıtı bulunamadı, bekleniyor: %s", e)
+                self._warned = True
+            return False
+        self._out = out
+        self._audio_ok = True
+        if self._warned:
+            log.info("ses aygıtı yeniden bulundu, çalma sürüyor")
+        self._warned = False
+        return True
+
+    def check_device(self):
+        """Çalan ses çıkışının hâlâ çalıştığını doğrular. Kopmuşsa çıkışı kapatır ve False döner.
+
+        Kopma: akış etkin değil, erişim hatası verdi ya da geri çağırma uzun süredir gelmiyor.
+        """
+        if not self._audio_ok:
+            return False
+        try:
+            alive = bool(self._out.active) and time.monotonic() - self._last_cb <= DEVICE_STALL_SEC
+        except Exception:
+            alive = False
+        if alive:
+            return True
+        log.warning("ses aygıtı koptu, yeniden bağlanana kadar bekleniyor")
+        self._drop_device()
+        return False
+
+    def _drop_device(self):
+        out, self._out = self._out, None
+        self._audio_ok = False
+        if out is not None:
+            try:
+                out.stop()
+            except Exception:
+                pass
+            try:
+                out.close()
+            except Exception:
+                pass
 
     def close(self):
         out, self._out = self._out, None
+        self._audio_ok = False
         if out is not None:
             try:
                 out.stop()
@@ -337,6 +391,7 @@ class Mixer:
                 s.close()
 
     def _callback(self, outdata, frames, time_info, status):
+        self._last_cb = time.monotonic()
         try:
             outdata[:] = self.render(frames)
         except Exception:

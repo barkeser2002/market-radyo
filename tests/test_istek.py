@@ -134,9 +134,15 @@ class FakeAnnouncer:
         return None
 
 
+def fake_open(self):
+    """Sahte ses aygıtı: gerçek çıkış açılmaz, aygıt varmış gibi davranılır."""
+    self._audio_ok = True
+    return True
+
+
 def make_engine(pool_ids):
     cfg = {"crossfade_sec": 0, "announce_enabled": False}
-    with mock.patch("audio.Mixer.open", lambda self: None):
+    with mock.patch("audio.Mixer.open", fake_open):
         eng = RadioEngine(cfg, FakeLibrary(pool_ids), FakeAnnouncer())
     return eng
 
@@ -147,6 +153,7 @@ class EngineRequestTest(unittest.TestCase):
     def setUp(self):
         self.patches = [
             mock.patch.object(RadioEngine, "_prefetch", lambda self, t: None),
+            mock.patch("audio.Mixer.check_device", lambda self: True),
             mock.patch.object(RadioEngine, "_open_item",
                               lambda self, item: PcmStream(frames=const(SR * 6 // 10, 0.5),
                                                            name=item[1].title)),

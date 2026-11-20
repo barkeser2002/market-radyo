@@ -151,7 +151,7 @@ Yeni sürüm, çalan parça bittiğinde bir sonraki parça geçişinde kurulur v
 ## Otomatik güncelleme
 
 - `config.json` içindeki `update_repo` (`barkeser2002/market-radyo`) ve `update_branch` (`main`) kullanılır.
-  `update_repo` `OWNER/...` ise güncelleme kontrolü yapılmaz.
+  `update_repo` `OWNER/...` ise güncelleme kontrolü yapılmaz. Varsayılan (config.json yoksa) `barkeser2002/market-radyo` tur.
 - Açılışta ve her 6 saatte bir arka planda GitHub Releases'ten en son sürüm (`vX.Y.Z` etiketi) denetlenir.
   Token gerekmez.
 - **Derlenmiş exe:** Yeni sürümün `MarketRadyo.exe` ve `MarketRadyo.exe.sha256` dosyaları indirilir,
