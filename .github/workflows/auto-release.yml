@@ -199,7 +199,7 @@ jobs:
       notes: ${{ steps.publish.outputs.notes }}
     steps:
       - name: Main'i al
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
@@ -377,7 +377,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Main'i al
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
